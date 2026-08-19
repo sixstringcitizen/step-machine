@@ -1,0 +1,224 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --chrome: #c8cdd4;
+  --chrome-dark: #8a9099;
+  --chrome-shine: #e8ecf0;
+  --wood: #6b3a1f;
+  --panel: #2a2d32;
+  --panel-inset: #1a1d20;
+  --accent: #d4a843;
+  --cell-size: 52px;
+  --cell-gap: 8px;
+}
+
+body {
+  background-color: var(--wood);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.04) 2px,
+      rgba(0,0,0,0.04) 4px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 8px,
+      rgba(0,0,0,0.02) 8px,
+      rgba(0,0,0,0.02) 9px
+    );
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rajdhani', 'Eurostile', 'Arial Narrow', sans-serif;
+  user-select: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-title {
+  color: var(--chrome-shine);
+  font-size: 13px;
+  letter-spacing: 6px;
+  opacity: 0.6;
+}
+
+.machine-body {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.6),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -2px 4px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Transport */
+
+.transport-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--panel-inset);
+  border-radius: 8px;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.transport-btn {
+  background: var(--chrome-dark);
+  color: var(--panel);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+  transition: background 0.1s;
+}
+
+.transport-btn:hover {
+  background: var(--chrome);
+}
+
+.transport-btn.active {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+
+.bpm-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--chrome-dark);
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+.bpm-control input {
+  width: 54px;
+  background: var(--panel);
+  border: 1px solid var(--chrome-dark);
+  border-radius: 3px;
+  color: var(--chrome-shine);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: center;
+  padding: 3px 4px;
+}
+
+.bpm-control input:focus {
+  outline: none;
+  border-color: var(--chrome-shine);
+}
+
+/* Grid */
+
+.grid-container {
+  display: flex;
+  gap: 12px;
+}
+
+.instrument-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 2px 0;
+}
+
+.instrument-label {
+  color: var(--chrome);
+  font-size: 11px;
+  letter-spacing: 2px;
+  width: 36px;
+  text-align: right;
+  height: var(--cell-size);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cell-gap);
+}
+
+.grid-row {
+  display: flex;
+  gap: var(--cell-gap);
+  align-items: center;
+}
+
+/* Cells */
+
+.grid-cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  border-radius: 50%;
+  border: 2px solid var(--chrome-dark);
+  background: var(--panel-inset);
+  cursor: pointer;
+  box-shadow:
+    inset 0 2px 6px rgba(0,0,0,0.6),
+    0 1px 0 rgba(255,255,255,0.05);
+  transition: border-color 0.05s;
+}
+
+.grid-cell:hover {
+  border-color: var(--chrome);
+}
+
+.grid-cell.on {
+  background: radial-gradient(circle at 35% 35%, var(--chrome-shine), var(--chrome));
+  border-color: var(--chrome-shine);
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+/* Knob */
+
+.row-knob {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--chrome), var(--chrome-dark));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 3px 6px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.3);
+  margin-left: 8px;
+}
+
+.row-knob-indicator {
+  width: 3px;
+  height: 12px;
+  background: var(--panel);
+  border-radius: 2px;
+  transform-origin: bottom center;
+  margin-bottom: -4px;
+}

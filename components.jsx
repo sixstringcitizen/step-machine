@@ -20,6 +20,7 @@ function Knob({ value, onChange, label }) {
 
   return (
     <div className="knob-wrap">
+      <div className="knob-label">VOL</div>
       <button
         className="knob"
         onClick={handleClick}
@@ -42,20 +43,26 @@ function Knob({ value, onChange, label }) {
 }
 
 // ---- Step Cell ----
-function StepCell({ on, downbeat, triggered, onToggle, onDragEnter, onDragStart }) {
-  const ref = useRef(null);
+function StepCell({ index, on, downbeat, triggered, onToggle, onDragEnter, onDragStart }) {
+  const onPointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    onDragStart();
+    onToggle();
+  };
+
   return (
-    <div className="step-cell" data-downbeat={downbeat}>
+    <div className="step-cell" data-downbeat={downbeat} data-index={index}>
       <div
-        ref={ref}
         className="step"
         data-on={on ? 'true' : 'false'}
         data-trigger={triggered ? 'true' : 'false'}
-        onMouseDown={(e) => { e.preventDefault(); onDragStart(); onToggle(); }}
-        onMouseEnter={(e) => { if (e.buttons === 1) onDragEnter(); }}
-        onTouchStart={(e) => { onDragStart(); onToggle(); }}
+        onPointerDown={onPointerDown}
+        onPointerEnter={(e) => { if (e.buttons & 1) onDragEnter(); }}
         role="checkbox"
         aria-checked={on}
+        aria-label={`Step ${index + 1}`}
       ></div>
     </div>
   );
@@ -63,21 +70,42 @@ function StepCell({ on, downbeat, triggered, onToggle, onDragEnter, onDragStart 
 
 // ---- Grid Row ----
 function GridRow({ track, steps, knob, onToggleStep, onDragEnter, onDragStart, onKnobChange, triggeredStep, onTriggerOne }) {
+  const touchDrag = useRef({ x: 0, y: 0, armed: false });
+
+  const onStepsTouchStart = (e) => {
+    const t = e.touches[0];
+    touchDrag.current = { x: t.clientX, y: t.clientY, armed: false };
+  };
+
+  const paintAtTouch = (e) => {
+    if (!e.touches.length) return;
+    const t = e.touches[0];
+    if (!touchDrag.current.armed) {
+      const dx = t.clientX - touchDrag.current.x;
+      const dy = t.clientY - touchDrag.current.y;
+      if (Math.hypot(dx, dy) < 10) return;
+      touchDrag.current.armed = true;
+    }
+    const cell = document.elementFromPoint(t.clientX, t.clientY)?.closest('.step-cell');
+    if (!cell || cell.dataset.index == null) return;
+    onDragEnter(Number(cell.dataset.index));
+  };
+
   return (
-    <React.Fragment>
+    <div className="grid-row">
       <div
         className="row-label"
         onClick={onTriggerOne}
         title={`Trigger ${track.name}`}
-        style={{ cursor: 'pointer' }}
       >
         {track.id}
         <span className="sub">{track.name}</span>
       </div>
-      <div className="steps">
+      <div className="steps" onTouchStart={onStepsTouchStart} onTouchMove={paintAtTouch}>
         {steps.map((on, i) => (
           <StepCell
             key={i}
+            index={i}
             on={on}
             downbeat={false}
             triggered={triggeredStep === i && on}
@@ -88,7 +116,7 @@ function GridRow({ track, steps, knob, onToggleStep, onDragEnter, onDragStart, o
         ))}
       </div>
       <Knob value={knob} onChange={onKnobChange} label={track.name} />
-    </React.Fragment>
+    </div>
   );
 }
 
@@ -108,25 +136,68 @@ function Switch({ on, onChange, label }) {
 function BpmControl({ bpm, onChange }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(bpm));
-  const dragState = useRef(null);
+  const screenRef = useRef(null);
+  const bpmRef = useRef(bpm);
+  const editingRef = useRef(editing);
+  bpmRef.current = bpm;
+  editingRef.current = editing;
 
-  const startDrag = (e) => {
-    if (editing) return;
-    dragState.current = { y: e.clientY, bpm };
-    const move = (ev) => {
-      if (!dragState.current) return;
-      const dy = dragState.current.y - ev.clientY;
-      const next = Math.round(Math.max(40, Math.min(220, dragState.current.bpm + dy * 0.4)));
+  useEffect(() => {
+    const el = screenRef.current;
+    if (!el || editing) return;
+
+    let drag = null;
+
+    const applyDrag = (clientY) => {
+      if (!drag) return;
+      const dy = drag.y - clientY;
+      const next = Math.round(Math.max(40, Math.min(220, drag.bpm + dy * 0.4)));
       onChange(next);
     };
-    const up = () => {
-      dragState.current = null;
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+
+    const endDrag = () => {
+      drag = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', endDrag);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', endDrag);
+      window.removeEventListener('touchcancel', endDrag);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-  };
+
+    const onMouseMove = (e) => applyDrag(e.clientY);
+
+    const onTouchMove = (e) => {
+      if (!drag || !e.touches.length) return;
+      e.preventDefault();
+      applyDrag(e.touches[0].clientY);
+    };
+
+    const onMouseDown = (e) => {
+      if (editingRef.current || e.button !== 0) return;
+      e.preventDefault();
+      drag = { y: e.clientY, bpm: bpmRef.current };
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', endDrag);
+    };
+
+    const onTouchStart = (e) => {
+      if (editingRef.current) return;
+      e.preventDefault();
+      drag = { y: e.touches[0].clientY, bpm: bpmRef.current };
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend', endDrag);
+      window.addEventListener('touchcancel', endDrag);
+    };
+
+    el.addEventListener('mousedown', onMouseDown);
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+
+    return () => {
+      endDrag();
+      el.removeEventListener('mousedown', onMouseDown);
+      el.removeEventListener('touchstart', onTouchStart);
+    };
+  }, [editing, onChange]);
 
   return (
     <div className="bpm">
@@ -146,10 +217,14 @@ function BpmControl({ bpm, onChange }) {
           />
         ) : (
           <div
+            ref={screenRef}
             className="bpm-screen"
-            onMouseDown={startDrag}
             onDoubleClick={() => { setDraft(String(bpm)); setEditing(true); }}
-            style={{ cursor: 'ns-resize' }}
+            role="slider"
+            aria-valuenow={bpm}
+            aria-valuemin={40}
+            aria-valuemax={220}
+            aria-label="Tempo in BPM — drag up or down to change"
             title="Drag to change · double-click to type"
           >
             {String(bpm).padStart(3, '0')}<span className="unit">BPM</span>
@@ -162,6 +237,67 @@ function BpmControl({ bpm, onChange }) {
 }
 
 // ---- Top bar ----
+const EXPORT_LOOP_OPTIONS = [1, 4, 8, 16];
+
+function DownloadIcon() {
+  return (
+    <svg className="hw-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+function ExportDropdown({ label, onExport, exporting }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+
+  const handleSelect = (loops) => {
+    setOpen(false);
+    onExport(loops);
+  };
+
+  return (
+    <div className={`export-dropdown${open ? ' is-open' : ''}`} ref={wrapRef}>
+      <button
+        className="hw-btn"
+        onClick={() => setOpen((o) => !o)}
+        disabled={exporting}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`${label} export options`}
+      >
+        {exporting ? '· · ·' : <><DownloadIcon />{label}</>}
+      </button>
+      {open && (
+        <div className="export-dropdown-menu" role="menu">
+          {EXPORT_LOOP_OPTIONS.map((loops) => (
+            <button
+              key={loops}
+              type="button"
+              className="hw-btn export-dropdown-item"
+              role="menuitem"
+              onClick={() => handleSelect(loops)}
+            >
+              <DownloadIcon />Loop {loops}×
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TopBar({ playing, onTogglePlay, bpm, onBpmChange, loop, onLoopChange, onExportWav, onExportMidi, exporting }) {
   return (
     <div className="topbar">
@@ -193,10 +329,8 @@ function TopBar({ playing, onTogglePlay, bpm, onBpmChange, loop, onLoopChange, o
       </div>
 
       <div className="topbar-right">
-        <button className="hw-btn" onClick={onExportWav} disabled={exporting}>
-          {exporting === 'wav' ? '· · ·' : 'WAV'}
-        </button>
-        <button className="hw-btn" onClick={onExportMidi}>MIDI</button>
+        <ExportDropdown label="WAV" onExport={onExportWav} exporting={exporting === 'wav'} />
+        <ExportDropdown label="MIDI" onExport={onExportMidi} exporting={exporting === 'midi'} />
       </div>
     </div>
   );

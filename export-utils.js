@@ -30,57 +30,24 @@ function audioBufferToWav(buffer) {
   return new Blob([out], { type: 'audio/wav' });
 }
 
-async function renderLoopToWav(pattern, knobPositions, bpm) {
+async function renderLoopToWav(pattern, knobPositions, bpm, loops) {
   const stepDur = 60 / bpm / 2; // 8th notes
-  const totalDur = stepDur * window.STEP_COUNT + 0.6; // tail
+  const loopDur = stepDur * window.STEP_COUNT;
+  const totalDur = loopDur * loops + 0.6; // tail
   const buffer = await Tone.Offline(async ({ transport }) => {
     transport.bpm.value = bpm;
-    const limiter = new Tone.Limiter(-1).toDestination();
-
-    const make = {
-      KD: () => {
-        const k = new Tone.MembraneSynth({ pitchDecay:0.04, octaves:6,
-          envelope:{attack:0.001,decay:0.32,sustain:0,release:0.5}});
-        const g = new Tone.Gain(1); k.connect(g); g.connect(limiter);
-        return { g, fire: (t,v) => k.triggerAttackRelease('C2','8n',t,v) };
-      },
-      SN: () => {
-        const n = new Tone.NoiseSynth({ envelope:{attack:0.001,decay:0.18,sustain:0}});
-        const b = new Tone.MembraneSynth({ pitchDecay:0.02, octaves:4,
-          envelope:{attack:0.001,decay:0.12,sustain:0}});
-        const hp = new Tone.Filter(1500,'highpass');
-        const g = new Tone.Gain(0.7); n.connect(hp); hp.connect(g); b.connect(g); g.connect(limiter);
-        return { g, fire: (t,v) => { n.triggerAttackRelease('16n',t,v); b.triggerAttackRelease('G2','16n',t,v*0.7); } };
-      },
-      HH: () => {
-        const h = new Tone.MetalSynth({ frequency:250, envelope:{attack:0.001,decay:0.08,release:0.02},
-          harmonicity:5.1, modulationIndex:32, resonance:4000, octaves:1.5});
-        const hp = new Tone.Filter(7000,'highpass');
-        const g = new Tone.Gain(0.22); h.connect(hp); hp.connect(g); g.connect(limiter);
-        return { g, fire: (t,v) => h.triggerAttackRelease('32n',t,v*0.9) };
-      },
-      HT: () => {
-        const m = new Tone.MembraneSynth({ pitchDecay:0.05, octaves:4,
-          envelope:{attack:0.001,decay:0.3,sustain:0}});
-        const g = new Tone.Gain(0.7); m.connect(g); g.connect(limiter);
-        return { g, fire: (t,v) => m.triggerAttackRelease('A2','8n',t,v) };
-      },
-      FT: () => {
-        const m = new Tone.MembraneSynth({ pitchDecay:0.06, octaves:4,
-          envelope:{attack:0.001,decay:0.45,sustain:0}});
-        const g = new Tone.Gain(0.75); m.connect(g); g.connect(limiter);
-        return { g, fire: (t,v) => m.triggerAttackRelease('E2','8n',t,v) };
-      },
-    };
-    const voices = {};
+    const { limiter } = window.createStepOutputChain(Tone.getDestination());
+    const voices = window.createStepVoices(limiter);
     for (const t of window.STEP_TRACKS) {
-      voices[t.id] = make[t.id]();
-      voices[t.id].g.gain.value = (window.STEP_KNOB_GAINS[knobPositions[t.id]] ?? 0.85);
+      voices[t.id].gain.gain.value = (window.STEP_KNOB_GAINS[knobPositions[t.id]] ?? 0.85);
     }
-    for (let i = 0; i < window.STEP_COUNT; i++) {
-      const t = i * stepDur;
-      for (const tr of window.STEP_TRACKS) {
-        if (pattern[tr.id] && pattern[tr.id][i]) voices[tr.id].fire(t, 1);
+    for (let loop = 0; loop < loops; loop++) {
+      const loopOffset = loop * loopDur;
+      for (let i = 0; i < window.STEP_COUNT; i++) {
+        const t = loopOffset + i * stepDur;
+        for (const tr of window.STEP_TRACKS) {
+          if (pattern[tr.id] && pattern[tr.id][i]) voices[tr.id].trigger(t, 1);
+        }
       }
     }
     transport.start();
@@ -101,21 +68,25 @@ function midiVarLen(value) {
   }
   return bytes;
 }
-function buildMidi(pattern, bpm) {
+function buildMidi(pattern, bpm, loops) {
   // GM drum notes (channel 10 / 9 zero-indexed)
   const noteMap = { KD: 36, SN: 38, HH: 42, HT: 50, FT: 41 };
   const ticksPerBeat = 480;
   const stepTicks = ticksPerBeat / 2; // 8th notes
+  const loopTicks = window.STEP_COUNT * stepTicks;
   // gather events
   const events = []; // {tick, type:'on'|'off', note}
-  for (let i = 0; i < window.STEP_COUNT; i++) {
-    for (const tr of window.STEP_TRACKS) {
-      if (pattern[tr.id] && pattern[tr.id][i]) {
-        const note = noteMap[tr.id];
-        const onTick = i * stepTicks;
-        const offTick = onTick + Math.floor(stepTicks * 0.4);
-        events.push({ tick: onTick, type: 'on', note });
-        events.push({ tick: offTick, type: 'off', note });
+  for (let loop = 0; loop < loops; loop++) {
+    const tickOffset = loop * loopTicks;
+    for (let i = 0; i < window.STEP_COUNT; i++) {
+      for (const tr of window.STEP_TRACKS) {
+        if (pattern[tr.id] && pattern[tr.id][i]) {
+          const note = noteMap[tr.id];
+          const onTick = tickOffset + i * stepTicks;
+          const offTick = onTick + Math.floor(stepTicks * 0.4);
+          events.push({ tick: onTick, type: 'on', note });
+          events.push({ tick: offTick, type: 'off', note });
+        }
       }
     }
   }
@@ -141,7 +112,7 @@ function buildMidi(pattern, bpm) {
     trackBytes.push(status, ev.note, ev.type === 'on' ? 100 : 0);
   }
   // end of loop tick
-  const endDelta = (window.STEP_COUNT * stepTicks) - lastTick;
+  const endDelta = (loops * loopTicks) - lastTick;
   trackBytes.push(...midiVarLen(Math.max(0, endDelta)), 0xff, 0x2f, 0x00);
 
   // Header

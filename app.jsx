@@ -37,7 +37,7 @@ function App() {
   const engineRef = useRef(null);
 
   const [pattern, setPattern] = useState(initialPattern);
-  const [knobs, setKnobs] = useState({ HH:1, SN:1, HT:1, FT:1, KD:1 });
+  const [knobs, setKnobs] = useState({ HH:0, SN:1, HT:1, FT:1, KD:1 });
   const [playing, setPlaying] = useState(false);
   const [bpm, setBpm] = useState(110);
   const [loop, setLoop] = useState(true);
@@ -158,12 +158,19 @@ function App() {
   };
 
   // Exports
-  const onExportWav = async () => {
+  const buildExportFilename = (loops, ext) => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `step-machine-${bpm}bpm-${loops}x-${stamp}.${ext}`;
+  };
+
+  const onExportWav = async (loops) => {
     await ensureEngine();
     setExporting('wav');
     try {
-      const blob = await window.renderLoopToWav(patternRef.current, knobsRef.current, bpm);
-      window.downloadBlob(blob, `step-machine-${bpm}bpm.wav`);
+      const blob = await window.renderLoopToWav(patternRef.current, knobsRef.current, bpm, loops);
+      window.downloadBlob(blob, buildExportFilename(loops, 'wav'));
     } catch (e) {
       console.error('WAV export failed', e);
       alert('WAV export failed: ' + e.message);
@@ -171,9 +178,9 @@ function App() {
       setExporting(null);
     }
   };
-  const onExportMidi = () => {
-    const blob = window.buildMidi(patternRef.current, bpm);
-    window.downloadBlob(blob, `step-machine-${bpm}bpm.mid`);
+  const onExportMidi = (loops) => {
+    const blob = window.buildMidi(patternRef.current, bpm, loops);
+    window.downloadBlob(blob, buildExportFilename(loops, 'mid'));
   };
 
   // Keyboard
@@ -200,11 +207,17 @@ function App() {
       space: '"Space Grotesk", sans-serif',
       mono:  '"DM Mono", monospace',
     };
-    stylesheet.textContent = `.row-label, .brand, .panel-title, .knob-positions, .switch-label, .bpm-label, .hw-btn { font-family: ${map[tweaks.labelStyle] || map.saira} !important; }`;
+    stylesheet.textContent = `.row-label, .brand, .panel-title, .knob-label, .knob-positions, .switch-label, .bpm-label, .hw-btn { font-family: ${map[tweaks.labelStyle] || map.saira} !important; }`;
   }, [tweaks.labelStyle]);
 
   return (
     <React.Fragment>
+      {tweaks.showHint && (
+        <div className="hint">
+          <kbd>SPACE</kbd> play/stop &nbsp;·&nbsp; click circles to toggle beats &nbsp;·&nbsp; drag bpm up/down to change speed
+        </div>
+      )}
+
       <div className="machine-stage">
       <div className="machine">
         {/* photographic wood frame: 4 scaled pieces (top, bottom, left, right) */}
@@ -246,12 +259,6 @@ function App() {
         </div>
       </div>
       </div>
-
-      {tweaks.showHint && (
-        <div className="hint">
-          <kbd>SPACE</kbd> play / stop &nbsp;·&nbsp; click pad to toggle &nbsp;·&nbsp; drag to paint &nbsp;·&nbsp; click row label to audition &nbsp;·&nbsp; drag BPM up/down
-        </div>
-      )}
 
       <TweaksPanel title="Tweaks">
         <TweakSection label="Enclosure" />

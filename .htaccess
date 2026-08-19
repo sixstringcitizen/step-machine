@@ -1,0 +1,7 @@
+AddType application/javascript .jsx .js
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|jsx|html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
